@@ -1,0 +1,195 @@
+import pygame
+import sys
+import random
+
+# Инициализация Pygame
+pygame.init()
+
+# Константы
+WIDTH, HEIGHT = 400, 500
+GRID_SIZE = 4
+TILE_SIZE = 80
+MARGIN = 5
+FONT_SIZE = 36
+
+# Цвета
+WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
+GRAY = (200, 200, 200)
+BLUE = (100, 100, 255)
+RED = (255, 100, 100)
+GREEN = (100, 255, 100)
+COLORS = [BLUE, RED]  # Цвета игроков
+
+# Создание окна
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("Пятнашки - Игра для двоих")
+font = pygame.font.SysFont(None, FONT_SIZE)
+small_font = pygame.font.SysFont(None, 24)
+
+class Game15:
+    def __init__(self):
+        self.reset_game()
+        
+    def reset_game(self):
+        # Создаем решенную головоломку
+        self.board = [[i + j * GRID_SIZE + 1 for i in range(GRID_SIZE)] 
+                      for j in range(GRID_SIZE)]
+        self.board[GRID_SIZE-1][GRID_SIZE-1] = 0  # Пустая клетка
+        self.empty_pos = (GRID_SIZE-1, GRID_SIZE-1)
+        
+        # Перемешиваем поле
+        self.shuffle_board(100)
+        
+        self.current_player = 0  # 0 - первый игрок, 1 - второй
+        self.moves_count = [0, 0]  # Количество ходов каждого игрока
+        self.game_over = False
+        self.winner = None
+        
+    def shuffle_board(self, moves=100):
+        """Перемешивает поле совершая случайные ходы"""
+        directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]  # Вправо, вниз, влево, вверх
+        
+        for _ in range(moves):
+            valid_moves = []
+            empty_r, empty_c = self.empty_pos
+            
+            for dr, dc in directions:
+                new_r, new_c = empty_r + dr, empty_c + dc
+                if 0 <= new_r < GRID_SIZE and 0 <= new_c < GRID_SIZE:
+                    valid_moves.append((dr, dc))
+            
+            if valid_moves:
+                dr, dc = random.choice(valid_moves)
+                self.swap_tiles(empty_r, empty_c, empty_r + dr, empty_c + dc)
+    
+    def swap_tiles(self, r1, c1, r2, c2):
+        """Меняет местами две клетки"""
+        self.board[r1][c1], self.board[r2][c2] = self.board[r2][c2], self.board[r1][c1]
+        self.empty_pos = (r2, c2)
+    
+    def is_valid_move(self, row, col):
+        """Проверяет, можно ли переместить клетку на пустое место"""
+        empty_r, empty_c = self.empty_pos
+        return (abs(row - empty_r) == 1 and col == empty_c) or \
+               (abs(col - empty_c) == 1 and row == empty_r)
+    
+    def make_move(self, row, col):
+        """Выполняет ход игрока"""
+        if self.game_over or not self.is_valid_move(row, col):
+            return False
+            
+        empty_r, empty_c = self.empty_pos
+        self.swap_tiles(empty_r, empty_c, row, col)
+        self.moves_count[self.current_player] += 1
+        
+        # Проверяем, решена ли головоломка
+        if self.is_solved():
+            self.game_over = True
+            self.winner = self.current_player
+        else:
+            # Передаем ход следующему игроку
+            self.current_player = 1 - self.current_player
+            
+        return True
+    
+    def is_solved(self):
+        """Проверяет, решена ли головоломка"""
+        expected = 1
+        for row in range(GRID_SIZE):
+            for col in range(GRID_SIZE):
+                if row == GRID_SIZE-1 and col == GRID_SIZE-1:
+                    if self.board[row][col] != 0:
+                        return False
+                else:
+                    if self.board[row][col] != expected:
+                        return False
+                    expected += 1
+        return True
+    
+    def draw(self, screen):
+        """Рисует игровое поле и информацию"""
+        # Рисуем информацию о игроках
+        player_y = HEIGHT - 80
+        
+        for i in range(2):
+            color = COLORS[i]
+            player_text = f"Игрок {i+1}: {self.moves_count[i]} ходов"
+            text_surface = small_font.render(player_text, True, color)
+            
+            # Подсвечиваем текущего игрока
+            if i == self.current_player and not self.game_over:
+                pygame.draw.rect(screen, (color[0]//2, color[1]//2, color[2]//2), 
+                               (10, player_y + i*30, WIDTH-20, 25))
+            
+            screen.blit(text_surface, (20, player_y + i*30))
+        
+        # Рисуем поле
+        for row in range(GRID_SIZE):
+            for col in range(GRID_SIZE):
+                value = self.board[row][col]
+                if value == 0:  # Пустая клетка
+                    continue
+                
+                # Позиция клетки на экране
+                x = col * (TILE_SIZE + MARGIN) + MARGIN
+                y = row * (TILE_SIZE + MARGIN) + MARGIN
+                
+                # Цвет клетки (немного прозрачный цвет текущего игрока)
+                color = COLORS[self.current_player] if not self.game_over else GRAY
+                tile_color = (color[0], color[1], color[2], 150)
+                
+                pygame.draw.rect(screen, tile_color, (x, y, TILE_SIZE, TILE_SIZE))
+                pygame.draw.rect(screen, BLACK, (x, y, TILE_SIZE, TILE_SIZE), 2)
+                
+                # Текст на клетке
+                text_surface = font.render(str(value), True, BLACK)
+                text_rect = text_surface.get_rect(center=(x + TILE_SIZE//2, y + TILE_SIZE//2))
+                screen.blit(text_surface, text_rect)
+        
+        # Сообщение о результате игры
+        if self.game_over:
+            result_y = HEIGHT - 140
+            if self.winner is not None:
+                winner_text = f"Игрок {self.winner + 1} победил!"
+                text_surface = font.render(winner_text, True, COLORS[self.winner])
+                screen.blit(text_surface, (WIDTH//2 - text_surface.get_width()//2, result_y))
+            
+            restart_text = "Нажмите R для новой игры"
+            text_surface = small_font.render(restart_text, True, BLACK)
+            screen.blit(text_surface, (WIDTH//2 - text_surface.get_width()//2, result_y + 40))
+
+def main():
+    game = Game15()
+    clock = pygame.time.Clock()
+    
+    while True:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_r:  # Перезапуск игры
+                    game.reset_game()
+            
+            if event.type == pygame.MOUSEBUTTONDOWN and not game.game_over:
+                if event.button == 1:  # Левая кнопка мыши
+                    x, y = event.pos
+                    
+                    # Проверяем, кликнули ли по игровому полю
+                    if y < GRID_SIZE * (TILE_SIZE + MARGIN):
+                        col = x // (TILE_SIZE + MARGIN)
+                        row = y // (TILE_SIZE + MARGIN)
+                        
+                        if 0 <= row < GRID_SIZE and 0 <= col < GRID_SIZE:
+                            game.make_move(row, col)
+        
+        # Отрисовка
+        screen.fill(WHITE)
+        game.draw(screen)
+        pygame.display.flip()
+        clock.tick(60)
+
+if __name__ == "__main__":
+    main()
